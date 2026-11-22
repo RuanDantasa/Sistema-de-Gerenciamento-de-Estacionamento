@@ -89,7 +89,7 @@ public class Ticket {
     }
 
     public void verTicket() {
-        SimpleDateFormat formato = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        SimpleDateFormat formato = new SimpleDateFormat("dia/mes/ano hora:minuto:segundo");
         System.out.println("ID do Ticket: " + id);
         System.out.println("Veículo: " + veiculo);
         System.out.println("Vaga: " + vaga);
