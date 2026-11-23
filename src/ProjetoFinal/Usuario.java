@@ -102,4 +102,16 @@ public class Usuario {
         return listaUsuarios;
     }
 
+    public static boolean autenticar(String login, String senha){
+        for(Usuario u : listaUsuarios){
+            if(u.login.equals(login) && u.senha.equals(senha)){
+                return u.ativo;
+            }
+        } return false;
+    }
+
+    public static void logout(){
+        System.out.println("Sessão finalizada.");
+    }
+
 }
