@@ -89,9 +89,9 @@ public class Ticket {
     }
 
     public void verTicket() {
-        SimpleDateFormat formato = new SimpleDateFormat("dia/mes/ano hora:minuto:segundo");
+        SimpleDateFormat formato = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
         System.out.println("ID do Ticket: " + id);
-        System.out.println("Veículo: " + veiculo);
+        System.out.println("Veículo: " + (veiculo != null ? veiculo.verVeiculo() : "Não informado"));
         System.out.println("Vaga: " + vaga);
         System.out.println("Entrada: " + (dataHoraEntrada != null ? formato.format(dataHoraEntrada) : "Não informada"));
         System.out.println("Saída: " + (dataHoraSaida != null ? formato.format(dataHoraSaida) : "Em aberto"));
