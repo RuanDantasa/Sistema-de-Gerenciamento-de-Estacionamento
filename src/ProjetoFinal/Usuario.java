@@ -72,7 +72,7 @@ public class Usuario {
     }
     
     public static Usuario criarUsuario(String nome, String cpf, String login, String senha, boolean ativo, boolean admin){
-        Usuario novo = new Usuario(nome, cpf, login, senha, true, admin);
+        Usuario novo = new Usuario(nome, cpf, login, senha, ativo, admin);
         listaUsuarios.add(novo);
         return novo;
     }
