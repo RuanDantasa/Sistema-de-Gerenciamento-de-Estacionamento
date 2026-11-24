@@ -1,6 +1,7 @@
 package ProjetoFinal;
 
 public enum TipoVeiculo {
-    CARRO,
-    MOTO
+    MOTO,
+    CARRO_PASSEIO,
+    CAMINHONETE
 }
