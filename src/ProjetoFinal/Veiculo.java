@@ -13,35 +13,18 @@ public class Veiculo {
         this.tipo = tipo;
     }
 
-    public String getPlaca() {
-        return placa;
-    }
-
-    public void setPlaca(String placa) {
-        this.placa = placa;
-    }
-
-    public String getModelo() {
-        return modelo;
-    }
-
-    public void setModelo(String modelo) {
+    public void atualizar(String modelo, String cor, TipoVeiculo tipo) {
         this.modelo = modelo;
-    }
-
-    public String getCor() {
-        return cor;
-    }
-
-    public void setCor(String cor) {
         this.cor = cor;
-    }
-
-    public TipoVeiculo getTipo() {
-        return tipo;
-    }
-
-    public void setTipo(TipoVeiculo tipo) {
         this.tipo = tipo;
     }
+
+    public void exibirDetalhes() {
+        System.out.println("Placa: " + placa + " | Modelo: " + modelo + " | Cor: " + cor + " | Tipo: " + tipo);
+    }
+
+    public String getPlaca() { return placa; }
+    public String getModelo() { return modelo; }
+    public String getCor() { return cor; }
+    public TipoVeiculo getTipo() { return tipo; }
 }
