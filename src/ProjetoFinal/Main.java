@@ -28,8 +28,16 @@ public class Main {
     }
 
     private static void inicializarAdminPadrao() {
-        if (Usuario.listarUsuarios().isEmpty()) {
+        boolean existeAdmin = false;
+        for (Usuario u : Usuario.listarUsuarios()) {
+            if (u.isAdmin() && u.isAtivo()) {
+                existeAdmin = true;
+                break;
+            }
+        }
+        if (!existeAdmin) {
             Usuario.criarUsuario("Administrador", "00000000000", "admin", "admin", true, true);
+            System.out.println("Admin padrão criado: login=admin, senha=admin");
         }
     }
 
@@ -65,8 +73,8 @@ public class Main {
         System.out.println("\n=== MENU PRINCIPAL (" + logado.getNome() + " - " + (logado.isAdmin() ? "Admin" : "Funcionário") + ") ===");
         System.out.println("1 - Operações de Tickets (Entrada / Saída / Caixa)");
         System.out.println("2 - Gestão de Veículos");
-        System.out.println("3 - Gestão de Vagas");
         if (Usuario.isAdminLogado()) {
+            System.out.println("3 - Gestão de Vagas");
             System.out.println("4 - Relatório Financeiro");
             System.out.println("5 - Gestão de Usuários");
         }
@@ -82,7 +90,11 @@ public class Main {
                 menuVeiculos();
                 break;
             case 3:
-                menuVagas();
+                if (Usuario.isAdminLogado()) {
+                    menuVagas();
+                } else {
+                    System.out.println("Acesso negado. Apenas administradores podem gerenciar vagas.");
+                }
                 break;
             case 4:
                 if (Usuario.isAdminLogado()) {
@@ -115,7 +127,6 @@ public class Main {
             System.out.println("3 - Consultar Valor Atual da Estadia");
             System.out.println("4 - Listar Tickets Ativos (ABERTO)");
             System.out.println("5 - Listar Todos os Tickets");
-            System.out.println("6 - Buscar Tickets por Data");
             System.out.println("6 - Buscar Tickets por Data");
             if (Usuario.isAdminLogado()) {
                 System.out.println("7 - Cancelar Ticket");
@@ -305,17 +316,20 @@ public class Main {
 
     private static void exibirRelatorioFinanceiro() {
         System.out.println("\n--- RELATÓRIO FINANCEIRO ---");
-        LocalDate dataInicio = lerData("Data inicial (dd/MM/yyyy): ");
-        LocalDate dataFim = lerData("Data final (dd/MM/yyyy): ");
+        
+        LocalDate dataInicio;
+        do {
+            dataInicio = lerData("Data inicial (dd/MM/yyyy): ");
+        } while (dataInicio == null); // Se der erro (null), pede de novo
 
-        if (dataInicio == null || dataFim == null) {
-            return;
-        }
-
-        if (dataFim.isBefore(dataInicio)) {
-            System.out.println("A data final não pode ser anterior à data inicial.");
-            return;
-        }
+        LocalDate dataFim;
+        do {
+            dataFim = lerData("Data final (dd/MM/yyyy): ");
+            if (dataFim != null && dataFim.isBefore(dataInicio)) {
+                System.out.println("A data final não pode ser anterior à data inicial. Tente novamente.");
+                dataFim = null; 
+            }
+        } while (dataFim == null);
 
         LocalDateTime inicio = dataInicio.atStartOfDay();
         LocalDateTime fim = dataFim.atTime(23, 59, 59, 999999999);
@@ -587,6 +601,8 @@ public class Main {
                     Usuario criado = Usuario.criarUsuario(nome, cpf, login, senha, true, admin);
                     if (criado != null) {
                         System.out.println("Usuário cadastrado com sucesso.");
+                    } else {
+                        System.out.println("Falha ao cadastrar: CPF ou login já podem estar em uso");
                     }
                     break;
                 case 2:
@@ -606,6 +622,8 @@ public class Main {
                     Usuario uEditar = buscarUsuarioPorLogin(scanner.nextLine().trim());
                     if (uEditar == null) {
                         System.out.println("Usuário não encontrado.");
+                    } else if(uEditar.getCpf().equals(Usuario.getUsuarioLogado().getCpf())){
+                        System.out.println("Você não pode editar sua própria conta enquanto logado.");
                     } else {
                         System.out.print("Novo nome: ");
                         String novoNome = scanner.nextLine();
@@ -628,6 +646,8 @@ public class Main {
                     Usuario uDesativar = buscarUsuarioPorLogin(scanner.nextLine().trim());
                     if (uDesativar == null) {
                         System.out.println("Usuário não encontrado.");
+                    } else if (uDesativar.getCpf().equals(Usuario.getUsuarioLogado().getCpf())) {
+                        System.out.println("Você não pode desativar sua própria conta enquanto logado.");
                     } else {
                         uDesativar.desativarUsuario();
                         System.out.println("Usuário desativado.");
