@@ -131,10 +131,13 @@ public class Ticket {
 
     public double calcularValor() {
         LocalDateTime saida = (this.dataHoraSaida != null) ? this.dataHoraSaida : LocalDateTime.now();
+        if (saida.isBefore(this.dataHoraEntrada)) {
+            throw new IllegalArgumentException("Data de saida não pode ser anterior a de entrada.");
+        }
         Duration duracao = Duration.between(this.dataHoraEntrada, saida);
         long horas = duracao.toHours();
 
-        if (duracao.toMinutesPart() > 0 || horas == 0) {
+        if (duracao.toMinutesPart() > 0 || duracao.toSecondsPart() > 0 || duracao.toNanosPart() > 0 || horas == 0) {
             horas++;
         }
 
@@ -181,29 +184,52 @@ public class Ticket {
             return;
         }
 
-        this.status = StatusTicket.CANCELADO;
-        if (this.dataHoraSaida == null) {
-            this.dataHoraSaida = LocalDateTime.now();
+        if (this.status != StatusTicket.ABERTO) {
+            System.out.println("Apenas tickets com status ABERTO podem ser cancelados.");
+            return;
         }
 
-        String sql = "UPDATE ticket SET dataHoraSaida = ?, status = ? WHERE id = ?";
+        LocalDateTime saidaCancelamento = (this.dataHoraSaida == null) ? LocalDateTime.now() : this.dataHoraSaida;
+        String sqlTicket = "UPDATE ticket SET dataHoraSaida = ?, status = ? WHERE id = ?";
+        String sqlVaga = "UPDATE vaga SET status = ? WHERE numero = ?";
 
-        try (Connection conn = Conexao.conectar();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
+        Connection conn = Conexao.conectar();
+        if (conn == null) {
+            return;
+        }
 
-            stmt.setString(1, this.dataHoraSaida.toString());
-            stmt.setString(2, this.status.name());
-            stmt.setInt(3, this.id);
+        try (conn) {
+            conn.setAutoCommit(false);
 
-            stmt.executeUpdate();
+            try (PreparedStatement stmtTicket = conn.prepareStatement(sqlTicket)) {
+                stmtTicket.setString(1, saidaCancelamento.toString());
+                stmtTicket.setString(2, StatusTicket.CANCELADO.name());
+                stmtTicket.setInt(3, this.id);
+                stmtTicket.executeUpdate();
+            }
 
             if (this.vaga != null) {
-                this.vaga.editarVaga(this.vaga.getNumero(), StatusVaga.LIVRE);
+                try (PreparedStatement stmtVaga = conn.prepareStatement(sqlVaga)) {
+                    stmtVaga.setString(1, StatusVaga.LIVRE.name());
+                    stmtVaga.setInt(2, this.vaga.getNumero());
+                    stmtVaga.executeUpdate();
+                }
+            }
+
+            conn.commit();
+            this.dataHoraSaida = saidaCancelamento;
+            this.status = StatusTicket.CANCELADO;
+            if (this.vaga != null) {
+                this.vaga.setStatus(StatusVaga.LIVRE);
             }
 
             System.out.println("Ticket cancelado com sucesso.");
 
         } catch (SQLException e) {
+            try {
+                conn.rollback();
+            } catch (SQLException ignored) {
+            }
             System.out.println("Erro ao cancelar ticket: " + e.getMessage());
         }
     }
