@@ -116,8 +116,11 @@ public class Main {
             System.out.println("4 - Listar Tickets Ativos (ABERTO)");
             System.out.println("5 - Listar Todos os Tickets");
             System.out.println("6 - Buscar Tickets por Data");
-            System.out.println("7 - Cancelar Ticket");
-            System.out.println("8 - Editar Ticket");
+            System.out.println("6 - Buscar Tickets por Data");
+            if (Usuario.isAdminLogado()) {
+                System.out.println("7 - Cancelar Ticket");
+                System.out.println("8 - Editar Ticket");
+            }
             System.out.println("0 - Voltar");
 
             opcao = lerInteiro("Escolha uma opção: ");
@@ -142,10 +145,18 @@ public class Main {
                     buscarTicketsPorData();
                     break;
                 case 7:
-                    cancelarTicket();
+                    if (Usuario.isAdminLogado()) {
+                        cancelarTicket();
+                    } else {
+                        System.out.println("Acesso negado. Apenas administradores podem cancelar tickets.");
+                    }
                     break;
                 case 8:
-                    editarTicket();
+                    if (Usuario.isAdminLogado()) {
+                        editarTicket();
+                    } else {
+                        System.out.println("Acesso negado. Apenas administradores podem editar tickets.");
+                    }
                     break;
                 case 0:
                     break;
@@ -307,7 +318,7 @@ public class Main {
         }
 
         LocalDateTime inicio = dataInicio.atStartOfDay();
-        LocalDateTime fim = dataFim.atTime(23, 59, 59);
+        LocalDateTime fim = dataFim.atTime(23, 59, 59, 999999999);
 
         double totalArrecadado = Ticket.gerarRelatorioFinanceiro(inicio, fim);
 
