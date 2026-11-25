@@ -88,3 +88,10 @@ nb-configuration.xml
 ## Miscellaneous
 ##############################
 *.log
+
+# Pasta de bibliotecas externas (o .jar do SQLite)
+lib/
+
+# Arquivos gerados pela compilação do Java no VS Code
+bin/
+*.class
