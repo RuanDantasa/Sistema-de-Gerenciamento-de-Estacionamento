@@ -1,22 +1,24 @@
 package ProjetoFinal;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Scanner;
 
 public class Main {
     private static final Scanner scanner = new Scanner(System.in);
-    private static Usuario usuarioLogado = null;
+    private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter FORMATO_DATA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     public static void main(String[] args) {
+        Conexao.inicializarBanco();
         inicializarAdminPadrao();
 
         boolean executando = true;
         while (executando) {
-            if (usuarioLogado == null) {
+            if (Usuario.getUsuarioLogado() == null) {
                 executando = exibirTelaLogin();
             } else {
                 exibirMenuPrincipal();
@@ -47,13 +49,7 @@ public class Main {
             String login = scanner.nextLine().trim();
             System.out.print("Senha: ");
             String senha = scanner.nextLine().trim();
-
-            if (Usuario.autenticar(login, senha)) {
-                usuarioLogado = buscarUsuarioPorLogin(login);
-                System.out.println("Bem-vindo(a), " + usuarioLogado.getNome() + "!");
-            } else {
-                System.out.println("Login, senha inválidos ou usuário desativado.");
-            }
+            Usuario.autenticar(login, senha);
         } else {
             System.out.println("Opção inválida.");
         }
@@ -61,11 +57,16 @@ public class Main {
     }
 
     private static void exibirMenuPrincipal() {
-        System.out.println("\n=== MENU PRINCIPAL (" + usuarioLogado.getNome() + " - " + (usuarioLogado.isAdmin() ? "Admin" : "Funcionário") + ") ===");
+        Usuario logado = Usuario.getUsuarioLogado();
+        if (logado == null) {
+            return;
+        }
+
+        System.out.println("\n=== MENU PRINCIPAL (" + logado.getNome() + " - " + (logado.isAdmin() ? "Admin" : "Funcionário") + ") ===");
         System.out.println("1 - Operações de Tickets (Entrada / Saída / Caixa)");
         System.out.println("2 - Gestão de Veículos");
         System.out.println("3 - Gestão de Vagas");
-        if (usuarioLogado.isAdmin()) {
+        if (Usuario.isAdminLogado()) {
             System.out.println("4 - Relatório Financeiro");
             System.out.println("5 - Gestão de Usuários");
         }
@@ -84,14 +85,14 @@ public class Main {
                 menuVagas();
                 break;
             case 4:
-                if (usuarioLogado.isAdmin()) {
+                if (Usuario.isAdminLogado()) {
                     exibirRelatorioFinanceiro();
                 } else {
                     System.out.println("Acesso negado. Apenas administradores podem acessar relatórios financeiros.");
                 }
                 break;
             case 5:
-                if (usuarioLogado.isAdmin()) {
+                if (Usuario.isAdminLogado()) {
                     menuUsuarios();
                 } else {
                     System.out.println("Acesso negado. Apenas administradores podem gerenciar usuários.");
@@ -99,7 +100,6 @@ public class Main {
                 break;
             case 0:
                 Usuario.logout();
-                usuarioLogado = null;
                 break;
             default:
                 System.out.println("Opção inválida.");
@@ -156,8 +156,8 @@ public class Main {
     }
 
     private static void registrarEntrada() {
-        List<Vaga> vagasLivres = Vaga.listarVagasLivres();
-        if (vagasLivres == null || vagasLivres.isEmpty()) {
+        List<Vaga> vagasDisponiveis = Vaga.listarVagasDisponiveis();
+        if (vagasDisponiveis.isEmpty()) {
             System.out.println("Entrada não autorizada: não há vagas livres disponíveis.");
             return;
         }
@@ -182,21 +182,23 @@ public class Main {
         }
 
         System.out.println("Vagas livres disponíveis:");
-        for (int i = 0; i < vagasLivres.size(); i++) {
-            System.out.println((i + 1) + " - " + vagasLivres.get(i));
+        for (int i = 0; i < vagasDisponiveis.size(); i++) {
+            Vaga vaga = vagasDisponiveis.get(i);
+            System.out.println((i + 1) + " - Vaga Nº " + vaga.getNumero() + " (" + vaga.getStatus() + ")");
         }
         int indice = lerInteiro("Selecione o número da opção da vaga: ") - 1;
-        if (indice < 0 || indice >= vagasLivres.size()) {
+        if (indice < 0 || indice >= vagasDisponiveis.size()) {
             System.out.println("Seleção de vaga inválida.");
             return;
         }
 
-        Vaga vagaSelecionada = vagasLivres.get(indice);
-        vagaSelecionada.setStatus(StatusVaga.OCUPADA);
+        Vaga vagaSelecionada = vagasDisponiveis.get(indice);
         Ticket ticket = Ticket.criarTicket(veiculo, vagaSelecionada);
 
-        System.out.println("Ticket aberto com sucesso!");
-        ticket.verTicket();
+        if (ticket != null) {
+            System.out.println("Ticket aberto com sucesso!");
+            ticket.verTicket();
+        }
     }
 
     private static void registrarSaida() {
@@ -206,11 +208,6 @@ public class Main {
         }
 
         ticket.registrarPagamento();
-        if (ticket.getVaga() != null) {
-            ticket.getVaga().setStatus(StatusVaga.LIVRE);
-        }
-
-        System.out.println("Pagamento registrado e saída liberada!");
         ticket.verTicket();
     }
 
@@ -237,24 +234,25 @@ public class Main {
     }
 
     private static void buscarTicketsPorData() {
-        Date data = lerData("Informe a data (dd/MM/yyyy): ");
+        LocalDate data = lerData("Informe a data (dd/MM/yyyy): ");
         if (data == null) {
             return;
         }
-        listarTickets(Ticket.buscarTicketsPorData(data));
+        listarTickets(Ticket.buscarTicketsPorData(data.atStartOfDay()));
     }
 
     private static void cancelarTicket() {
+        if (!Usuario.isAdminLogado()) {
+            System.out.println("Apenas administradores podem cancelar tickets.");
+            return;
+        }
+
         Ticket ticket = selecionarTicketNaLista(Ticket.listarTicketsAtivos());
         if (ticket == null) {
             return;
         }
 
         ticket.cancelarTicket();
-        if (ticket.getVaga() != null) {
-            ticket.getVaga().setStatus(StatusVaga.LIVRE);
-        }
-        System.out.println("Ticket #" + ticket.getId() + " cancelado com sucesso.");
     }
 
     private static void editarTicket() {
@@ -263,16 +261,19 @@ public class Main {
             return;
         }
 
-        Date novaEntrada = lerDataHora("Nova data/hora de entrada (dd/MM/yyyy HH:mm): ");
+        LocalDateTime novaEntrada = lerDataHoraOpcional("Nova data/hora de entrada (dd/MM/yyyy HH:mm) ou Enter para manter: ");
         if (novaEntrada == null) {
             novaEntrada = ticket.getDataHoraEntrada();
         }
 
-        System.out.print("Deseja informar data/hora de saída? (S/N): ");
+        System.out.print("Deseja informar/alterar data/hora de saída? (S/N): ");
         String respSaida = scanner.nextLine().trim();
-        Date novaSaida = ticket.getDataHoraSaida();
+        LocalDateTime novaSaida = ticket.getDataHoraSaida();
         if (respSaida.equalsIgnoreCase("S")) {
-            novaSaida = lerDataHora("Nova data/hora de saída (dd/MM/yyyy HH:mm): ");
+            LocalDateTime saidaInformada = lerDataHoraOpcional("Nova data/hora de saída (dd/MM/yyyy HH:mm): ");
+            if (saidaInformada != null) {
+                novaSaida = saidaInformada;
+            }
         }
 
         double novoValor = lerDouble("Novo valor total: ");
@@ -293,29 +294,24 @@ public class Main {
 
     private static void exibirRelatorioFinanceiro() {
         System.out.println("\n--- RELATÓRIO FINANCEIRO ---");
-        Date dataInicio = lerData("Data inicial (dd/MM/yyyy): ");
-        Date dataFim = lerData("Data final (dd/MM/yyyy): ");
+        LocalDate dataInicio = lerData("Data inicial (dd/MM/yyyy): ");
+        LocalDate dataFim = lerData("Data final (dd/MM/yyyy): ");
 
         if (dataInicio == null || dataFim == null) {
             return;
         }
 
-        Calendar calFim = Calendar.getInstance();
-        calFim.setTime(dataFim);
-        calFim.set(Calendar.HOUR_OF_DAY, 23);
-        calFim.set(Calendar.MINUTE, 59);
-        calFim.set(Calendar.SECOND, 59);
-        calFim.set(Calendar.MILLISECOND, 999);
-        dataFim = calFim.getTime();
-
-        List<Ticket> todos = Ticket.listarTickets();
-        double totalArrecadado = 0.0;
-        if (!todos.isEmpty()) {
-            totalArrecadado = todos.get(0).gerarRelatorioFinanceiro(dataInicio, dataFim);
+        if (dataFim.isBefore(dataInicio)) {
+            System.out.println("A data final não pode ser anterior à data inicial.");
+            return;
         }
 
-        SimpleDateFormat formato = new SimpleDateFormat("dd/MM/yyyy");
-        System.out.println("Período: " + formato.format(dataInicio) + " até " + formato.format(dataFim));
+        LocalDateTime inicio = dataInicio.atStartOfDay();
+        LocalDateTime fim = dataFim.atTime(23, 59, 59);
+
+        double totalArrecadado = Ticket.gerarRelatorioFinanceiro(inicio, fim);
+
+        System.out.println("Período: " + dataInicio.format(FORMATO_DATA) + " até " + dataFim.format(FORMATO_DATA));
         System.out.println("Total arrecadado (tickets pagos): R$ " + String.format("%.2f", totalArrecadado));
     }
 
@@ -344,7 +340,7 @@ public class Main {
                         System.out.println("Nenhum veículo cadastrado.");
                     } else {
                         for (Veiculo v : veiculos) {
-                            System.out.println(v.verVeiculo());
+                            v.verVeiculo();
                         }
                     }
                     break;
@@ -352,7 +348,7 @@ public class Main {
                     System.out.print("Placa para busca: ");
                     Veiculo encontrado = Veiculo.buscarVeiculoPorPlaca(scanner.nextLine());
                     if (encontrado != null) {
-                        System.out.println(encontrado.verVeiculo());
+                        encontrado.verVeiculo();
                     } else {
                         System.out.println("Veículo não encontrado.");
                     }
@@ -367,8 +363,12 @@ public class Main {
                         String modelo = scanner.nextLine();
                         System.out.print("Nova cor: ");
                         String cor = scanner.nextLine();
+                        TipoVeiculo novoTipo = selecionarTipoVeiculo();
+                        if (novoTipo == null) {
+                            break;
+                        }
                         try {
-                            vEditar.editarVeiculo(modelo, cor);
+                            vEditar.editarVeiculo(vEditar.getPlaca(), modelo, cor, novoTipo);
                             System.out.println("Veículo atualizado.");
                         } catch (IllegalArgumentException e) {
                             System.out.println("Erro: " + e.getMessage());
@@ -380,8 +380,10 @@ public class Main {
                     Veiculo vExcluir = Veiculo.buscarVeiculoPorPlaca(scanner.nextLine());
                     if (vExcluir == null) {
                         System.out.println("Veículo não encontrado.");
+                    } else if (possuiTicketAtivo(vExcluir.getPlaca())) {
+                        System.out.println("Não é possível excluir um veículo com ticket ABERTO.");
                     } else {
-                        vExcluir.excluirVeiculo();
+                        Veiculo.excluirVeiculo(vExcluir);
                         System.out.println("Veículo excluído.");
                     }
                     break;
@@ -393,12 +395,40 @@ public class Main {
         }
     }
 
+    private static boolean possuiTicketAtivo(String placa) {
+        for (Ticket ativo : Ticket.listarTicketsAtivos()) {
+            if (ativo.getVeiculo() != null && ativo.getVeiculo().getPlaca().equalsIgnoreCase(placa)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static Veiculo cadastrarVeiculoComPlaca(String placa) {
         System.out.print("Modelo: ");
         String modelo = scanner.nextLine();
         System.out.print("Cor: ");
         String cor = scanner.nextLine();
 
+        TipoVeiculo tipo = selecionarTipoVeiculo();
+        if (tipo == null) {
+            return null;
+        }
+
+        try {
+            Veiculo novo = Veiculo.criarVeiculo(placa, modelo, cor, tipo);
+            if (novo != null) {
+                System.out.println("Veículo cadastrado com sucesso:");
+                novo.verVeiculo();
+            }
+            return novo;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Erro ao cadastrar veículo: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static TipoVeiculo selecionarTipoVeiculo() {
         TipoVeiculo[] tipos = TipoVeiculo.values();
         for (int i = 0; i < tipos.length; i++) {
             System.out.println((i + 1) + " - " + tipos[i]);
@@ -408,74 +438,78 @@ public class Main {
             System.out.println("Tipo de veículo inválido.");
             return null;
         }
-
-        try {
-            Veiculo novo = Veiculo.criarVeiculo(placa, modelo, cor, tipos[indiceTipo]);
-            System.out.println("Veículo cadastrado: " + novo.verVeiculo());
-            return novo;
-        } catch (IllegalArgumentException e) {
-            System.out.println("Erro ao cadastrar veículo: " + e.getMessage());
-            return null;
-        }
+        return tipos[indiceTipo];
     }
 
     private static void menuVagas() {
         int opcao = -1;
         while (opcao != 0) {
             System.out.println("\n--- GESTÃO DE VAGAS ---");
-            System.out.println("1 - Listar Vagas Livres");
-            System.out.println("2 - Listar Todas as Vagas");
-            System.out.println("3 - Alterar Status de Vaga");
+            System.out.println("1 - Cadastrar Vaga");
+            System.out.println("2 - Listar Vagas Disponíveis");
+            System.out.println("3 - Listar Todas as Vagas");
+            System.out.println("4 - Alterar Status de Vaga");
+            System.out.println("5 - Excluir Vaga");
             System.out.println("0 - Voltar");
 
             opcao = lerInteiro("Escolha uma opção: ");
 
             switch (opcao) {
                 case 1:
-                    List<Vaga> livres = Vaga.listarVagasLivres();
-                    if (livres == null || livres.isEmpty()) {
-                        System.out.println("Nenhuma vaga livre.");
-                    } else {
-                        for (Vaga vaga : livres) {
-                            System.out.println(vaga);
-                        }
+                    int numero = lerInteiro("Número da vaga: ");
+                    StatusVaga statusInicial = selecionarStatusVaga();
+                    if (statusInicial == null) {
+                        break;
+                    }
+                    Vaga criada = Vaga.criarVaga(numero, statusInicial);
+                    if (criada != null) {
+                        System.out.println("Vaga cadastrada com sucesso:");
+                        criada.verVaga();
                     }
                     break;
                 case 2:
-                    List<Vaga> todas = Vaga.listarVagas();
-                    if (todas == null || todas.isEmpty()) {
-                        System.out.println("Nenhuma vaga cadastrada.");
+                    List<Vaga> livres = Vaga.listarVagasDisponiveis();
+                    if (livres.isEmpty()) {
+                        System.out.println("Nenhuma vaga livre.");
                     } else {
-                        for (Vaga vaga : todas) {
-                            System.out.println(vaga);
+                        for (Vaga vaga : livres) {
+                            vaga.verVaga();
                         }
                     }
                     break;
                 case 3:
-                    List<Vaga> lista = Vaga.listarVagas();
-                    if (lista == null || lista.isEmpty()) {
+                    List<Vaga> todas = Vaga.listarVagas();
+                    if (todas.isEmpty()) {
                         System.out.println("Nenhuma vaga cadastrada.");
+                    } else {
+                        for (Vaga vaga : todas) {
+                            vaga.verVaga();
+                        }
+                    }
+                    break;
+                case 4:
+                    Vaga vagaEditar = selecionarVagaNaLista(Vaga.listarVagas());
+                    if (vagaEditar == null) {
                         break;
                     }
-                    for (int i = 0; i < lista.size(); i++) {
-                        System.out.println((i + 1) + " - " + lista.get(i));
-                    }
-                    int indiceVaga = lerInteiro("Selecione a vaga: ") - 1;
-                    if (indiceVaga < 0 || indiceVaga >= lista.size()) {
-                        System.out.println("Seleção inválida.");
+                    StatusVaga novoStatus = selecionarStatusVaga();
+                    if (novoStatus == null) {
                         break;
                     }
-                    StatusVaga[] statuses = StatusVaga.values();
-                    for (int i = 0; i < statuses.length; i++) {
-                        System.out.println((i + 1) + " - " + statuses[i]);
-                    }
-                    int indiceStatus = lerInteiro("Novo status: ") - 1;
-                    if (indiceStatus < 0 || indiceStatus >= statuses.length) {
-                        System.out.println("Status inválido.");
-                        break;
-                    }
-                    lista.get(indiceVaga).setStatus(statuses[indiceStatus]);
+                    vagaEditar.editarVaga(vagaEditar.getNumero(), novoStatus);
                     System.out.println("Status da vaga atualizado.");
+                    break;
+                case 5:
+                    Vaga vagaExcluir = selecionarVagaNaLista(Vaga.listarVagas());
+                    if (vagaExcluir == null) {
+                        break;
+                    }
+                    if (vagaExcluir.getStatus() == StatusVaga.OCUPADA) {
+                        System.out.println("Não é possível excluir uma vaga que está OCUPADA.");
+                        break;
+                    }
+                    Vaga.excluirVaga(vagaExcluir);
+                    System.out.println("Vaga excluída.");
                     break;
                 case 0:
                     break;
@@ -483,6 +517,36 @@ public class Main {
                     System.out.println("Opção inválida.");
             }
         }
+    }
+
+    private static Vaga selecionarVagaNaLista(List<Vaga> vagas) {
+        if (vagas.isEmpty()) {
+            System.out.println("Nenhuma vaga cadastrada.");
+            return null;
+        }
+        for (int i = 0; i < vagas.size(); i++) {
+            Vaga vaga = vagas.get(i);
+            System.out.println((i + 1) + " - Vaga Nº " + vaga.getNumero() + " (" + vaga.getStatus() + ")");
+        }
+        int indice = lerInteiro("Selecione a vaga: ") - 1;
+        if (indice < 0 || indice >= vagas.size()) {
+            System.out.println("Seleção inválida.");
+            return null;
+        }
+        return vagas.get(indice);
+    }
+
+    private static StatusVaga selecionarStatusVaga() {
+        StatusVaga[] statuses = StatusVaga.values();
+        for (int i = 0; i < statuses.length; i++) {
+            System.out.println((i + 1) + " - " + statuses[i]);
+        }
+        int indiceStatus = lerInteiro("Selecione o status da vaga: ") - 1;
+        if (indiceStatus < 0 || indiceStatus >= statuses.length) {
+            System.out.println("Status inválido.");
+            return null;
+        }
+        return statuses[indiceStatus];
     }
 
     private static void menuUsuarios() {
@@ -509,15 +573,22 @@ public class Main {
                     String senha = scanner.nextLine();
                     System.out.print("É administrador? (S/N): ");
                     boolean admin = scanner.nextLine().trim().equalsIgnoreCase("S");
-                    Usuario.criarUsuario(nome, cpf, login, senha, true, admin);
-                    System.out.println("Usuário cadastrado com sucesso.");
+                    Usuario criado = Usuario.criarUsuario(nome, cpf, login, senha, true, admin);
+                    if (criado != null) {
+                        System.out.println("Usuário cadastrado com sucesso.");
+                    }
                     break;
                 case 2:
-                    for (Usuario u : Usuario.listarUsuarios()) {
+                    List<Usuario> usuarios = Usuario.listarUsuarios();
+                    if (usuarios.isEmpty()) {
+                        System.out.println("Nenhum usuário cadastrado.");
+                    } else {
+                        for (Usuario u : usuarios) {
+                            System.out.println("-----------------------------");
+                            u.verUsuario();
+                        }
                         System.out.println("-----------------------------");
-                        u.verUsuario();
                     }
-                    System.out.println("-----------------------------");
                     break;
                 case 3:
                     System.out.print("Login do usuário a editar: ");
@@ -606,25 +677,25 @@ public class Main {
         }
     }
 
-    private static Date lerData(String mensagem) {
-        SimpleDateFormat formato = new SimpleDateFormat("dd/MM/yyyy");
-        formato.setLenient(false);
+    private static LocalDate lerData(String mensagem) {
         System.out.print(mensagem);
         try {
-            return formato.parse(scanner.nextLine().trim());
-        } catch (ParseException e) {
+            return LocalDate.parse(scanner.nextLine().trim(), FORMATO_DATA);
+        } catch (DateTimeParseException e) {
             System.out.println("Data inválida. Use o formato dd/MM/yyyy.");
             return null;
         }
     }
 
-    private static Date lerDataHora(String mensagem) {
-        SimpleDateFormat formato = new SimpleDateFormat("dd/MM/yyyy HH:mm");
-        formato.setLenient(false);
+    private static LocalDateTime lerDataHoraOpcional(String mensagem) {
         System.out.print(mensagem);
+        String entrada = scanner.nextLine().trim();
+        if (entrada.isEmpty()) {
+            return null;
+        }
         try {
-            return formato.parse(scanner.nextLine().trim());
-        } catch (ParseException e) {
+            return LocalDateTime.parse(entrada, FORMATO_DATA_HORA);
+        } catch (DateTimeParseException e) {
             System.out.println("Data/hora inválida. Use o formato dd/MM/yyyy HH:mm.");
             return null;
         }
